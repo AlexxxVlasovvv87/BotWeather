@@ -16,31 +16,22 @@ from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 from copy import deepcopy as copy
 
+gr, gr1, professor = '', '', ''
 page = requests.get("https://www.mirea.ru/schedule/")
 soup = BeautifulSoup(page.text, "html.parser")
 result = re.findall(r"htt.+x", str(soup.find('div', {'class': 'rasspisanie'}). \
                                    find(string='Институт информационных технологий'). \
                                    find_parent('div').find_parent('div').findAll("a")))
-accept = 0
-url1 = []
-ogr = 0
-weather_access = 0
-groups_list = []
-groups = {}
-professors = {}
-count_pages = 0
-prof_access = 0
-x = []
-y1 = []
-y2 = []
-y3 = []
+accept, ogr, weather_access, count_pages, prof_access, t_weather, t_speed, t_wind = 0, 0, 0, 0, 0, 0, 0, 0
+groups, professors = {}, {}
+groups_list, url1, x, y1, y2, y3 = [], [], [], [], [], []
 week_days = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота"]
 
 
 def update():
     """
         Обновление данных расписания
-        Функция не имеет параметров
+        :return: сообщение об успешном обновлении данных из файла
     """
     count = 1
     for x in result:
@@ -50,93 +41,101 @@ def update():
                 file1.write(resp.content)
                 count += 1
     file1.close()
+    update_mes = "Данные обновлены"
+    return update_mes
 
 
 def replace_none(data):  # замена None на ''
     """
-        Замена символов для считывания файлов
-        :param data - словарь с данными
+        Заменить символы None на '' для правильного считывания файлов
+        :param data - словарь с полным расписанием из файла
+        :return: сообщение об успешном обновлении значений
     """
     for k, v in data.items() if isinstance(data, dict) else enumerate(data):
         if v is None:
             data[k] = {'subject': '', 'lesson_type': '', 'lecturer': '', 'classroom': '', 'url': ''}
         elif isinstance(v, (dict, list)):
             replace_none(v)
+    repl_mes = "Значения обновлены"
+    return repl_mes
 
 
-if datetime.datetime.now().weekday() == 0:  # Если понедельник, то данные обновляются
-    update()
-for i in range(3):      # Заполнение списков
-    book = xlrd.open_workbook("file{}.xlsx".format(i + 1))
-    sheet = book.sheet_by_index(0)
-    num_cols = sheet.ncols
-    num_rows = sheet.nrows
-    for col_index in range(num_cols):
-        group_cell = str(sheet.cell(1, col_index).value)
-        if "БО" in group_cell or "-18" in group_cell or "-17" in group_cell or "-19" in group_cell:
-            groups_list.append(group_cell)
-            week = {"понедельник": None, "вторник": None, "среда": None, "четверг": None, "пятница": None,
-                    "суббота": None}
-            for k in range(6):
-                day = [[], [], [], [], [], []]
-                for i in range(6):
-                    for j in range(2):
-                        subject = sheet.cell(3 + j + i * 2 + k * 12, col_index).value   # заполнение groups
-                        lesson_type = sheet.cell(3 + j + i * 2 + k * 12, col_index + 1).value
-                        lecturer = sheet.cell(3 + j + i * 2 + k * 12, col_index + 2).value
-                        classroom = sheet.cell(3 + j + i * 2 + k * 12, col_index + 3).value
-                        url = sheet.cell(3 + j + i * 2 + k * 12, col_index + 4).value
-                        lesson = {"subject": subject, "lesson_type": lesson_type, "lecturer": lecturer, # заполнение professors
-                                  "classroom": classroom, "url": url}
-                        day[i].append(lesson)
-                        professors_list = lecturer.split('\n')
-                        subject_list = subject.split('\n')
-                        pr_lesson = copy(lesson)
-                        pr_lesson.pop('lecturer')
-                        pr_lesson['group'] = group_cell
-
-                        for h in range(len(professors_list)):
-                            if len(subject_list) > h:
-                                pr_lesson['subject'] = subject_list[h]
-                            if professors_list[h] not in professors:
-                                day1 = [[None] * 2, [None] * 2, [None] * 2, [None] * 2, [None] * 2, [None] * 2]
-                                week1 = {'понедельник': copy(day1), 'вторник': copy(day1), 'среда': copy(day1),
-                                         'четверг': copy(day1),
-                                         'пятница': copy(day1), 'суббота': copy(day1)}
-                                professors.update({professors_list[h]: week1})
-                            professors[professors_list[h]][week_days[k]][i][j] = lesson
-                week[week_days[k]] = day
-            groups.update({group_cell: week})
-
+def update_rasp():
     """
-        ВАЖНО!
-        Запуск сессии, передача токена. Для работоспособности бота необходимо вписать токен в поле снизу. Получить токен можно, \
-        сгенерировав его в сообществе Вконтакте и вписав в поле ниже.
-        Подробнее по ссылке:
-        https://vk.com/dev/bots_docs
+        Обновление расписания один раз в неделю при необходимости
+        :return: сообщение об успешном обновлении данных
     """
+    if datetime.datetime.now().weekday() == 0:  # Если понедельник, то данные обновляются
+        update()
+    for i in range(3):  # Заполнение списков
+        book = xlrd.open_workbook("file{}.xlsx".format(i + 1))
+        sheet = book.sheet_by_index(0)
+        num_cols = sheet.ncols
+        num_rows = sheet.nrows
+        for col_index in range(num_cols):
+            group_cell = str(sheet.cell(1, col_index).value)
+            if "БО" in group_cell or "-18" in group_cell or "-17" in group_cell or "-19" in group_cell:
+                groups_list.append(group_cell)
+                week = {"понедельник": None, "вторник": None, "среда": None, "четверг": None, "пятница": None,
+                        "суббота": None}
+                for k in range(6):
+                    day = [[], [], [], [], [], []]
+                    for i in range(6):
+                        for j in range(2):
+                            subject = sheet.cell(3 + j + i * 2 + k * 12, col_index).value  # заполнение groups
+                            lesson_type = sheet.cell(3 + j + i * 2 + k * 12, col_index + 1).value
+                            lecturer = sheet.cell(3 + j + i * 2 + k * 12, col_index + 2).value
+                            classroom = sheet.cell(3 + j + i * 2 + k * 12, col_index + 3).value
+                            url = sheet.cell(3 + j + i * 2 + k * 12, col_index + 4).value
+                            lesson = {"subject": subject, "lesson_type": lesson_type, "lecturer": lecturer,
+                                      # заполнение professors
+                                      "classroom": classroom, "url": url}
+                            day[i].append(lesson)
+                            professors_list = lecturer.split('\n')
+                            subject_list = subject.split('\n')
+                            pr_lesson = copy(lesson)
+                            pr_lesson.pop('lecturer')
+                            pr_lesson['group'] = group_cell
 
-print('ready')
-replace_none(professors)
-vk_session = vk_api.VkApi(token='dba28ffac316eabeb7bc1e13ea9d65a3ab4a150621bb0eb9275421240c68b45c57cccafc2a406986a8a95')  # токен сюда
-vk = vk_session.get_api()
-longpoll = VkLongPoll(vk_session)
+                            for h in range(len(professors_list)):
+                                if len(subject_list) > h:
+                                    pr_lesson['subject'] = subject_list[h]
+                                if professors_list[h] not in professors:
+                                    day1 = [[None] * 2, [None] * 2, [None] * 2, [None] * 2, [None] * 2, [None] * 2]
+                                    week1 = {'понедельник': copy(day1), 'вторник': copy(day1), 'среда': copy(day1),
+                                             'четверг': copy(day1),
+                                             'пятница': copy(day1), 'суббота': copy(day1)}
+                                    professors.update({professors_list[h]: week1})
+                                professors[professors_list[h]][week_days[k]][i][j] = lesson
+                    week[week_days[k]] = day
+                groups.update({group_cell: week})
+    rasp_mes = "Расписание успешно обновлено"
+    return rasp_mes
 
 
-def error():
+def error(event: str, vk: str):
     """
         Показывает сообщение с ошибкой. Говорит про отсутствие заданной команды
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об отсутствии заданной команды
     """
     vk.messages.send(
         user_id=event.user_id,
         random_id=get_random_id(),
         message='Я не знаю такой команды. Попробуйте что-нибудь другое'.format(event.text)
     )
+    err_mes = "Отсутствие заданной команды"
+    return err_mes
 
 
-def coronavirus():
+def coronavirus(event: str, vk: str, vk_session: str):
     """
         Считывает данные с сайта со статистикой по коронавирусу и выводит его в качестве графика в ответном сообщении.
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :param vk_session - передача api от Вк непосредственно
+        :return: сообщение об выводе статистики по коронавирусу
     """
     page = requests.get('https://coronavirusstat.ru/country/russia/')
     soup = BeautifulSoup(page.text, 'html.parser')
@@ -185,7 +184,7 @@ def coronavirus():
         Данный адрес предоставлен как пример для его указания.
         Выпилить в случае несовместимости с жизнью.
     """
-    photo = upload.photo_messages(photos='C:/Users/leone/PycharmProjects/testproject1/coronavirus/covid.png')[0]
+    photo = upload.photo_messages(photos='coronavirus/covid.png')[0]
     attachments.append('photo{}_{}'.format(photo['owner_id'], photo['id']))
     vk.messages.send(
         user_id=event.user_id,
@@ -196,13 +195,18 @@ def coronavirus():
             this_day, data[dates[0]]["7"], data[dates[9]]["8"], data[dates[0]]["1"], data[dates[0]]["2"],
             data[dates[0]]["3"], data[dates[0]]["4"], data[dates[0]]["5"], data[dates[0]]["6"],
         ))
+    corona_mes = "Данные по коронавирусу отправлены"
+    return corona_mes
 
 
-def found():
+def found(event: str, vk: str):
     """
         Данная функция находит расписание определённого преподавателя из университета, при необходимости предлагая выбрать
         его из нескольких возможных вариантов. Функция позволяет показать расписание преподавателя на сегодня, на завтра,
         на эту или следующую неделю
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешном отправлении данных о преподавателе
     """
     professor = event.text.split()[1]
     professors_list = [key for key, value in professors.items() if key.startswith(professor)]
@@ -217,7 +221,6 @@ def found():
             keyboard=keyboard.get_keyboard(),
             message='Выберите преподавателя'
         )
-        prof_access = 1
     elif len(professors_list) == 1:
         keyboard = VkKeyboard(one_time=True)
         keyboard.add_button('На сегодня', color=VkKeyboardColor.POSITIVE)
@@ -232,19 +235,22 @@ def found():
             keyboard=keyboard.get_keyboard(),
             message='Показать расписание преподавателя {}...'.format(professors_list[0])
         )
-        prof_access = 1
-        accept = 1
     else:
         vk.messages.send(
             user_id=event.user_id,
             random_id=get_random_id(),
             message='Такого преподавателя не нашлось'
         )
+    found_mes = "Данные по преподавателю отправлены"
+    return found_mes
 
 
-def start():
+def start(event: str, vk: str):
     """
         Начальное сообщение с отображением и описанием всех функций бота в едином сообщении
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешной отправке сообщения с функционалом бота
     """
     vk.messages.send(
         user_id=event.user_id,
@@ -261,13 +267,23 @@ def start():
                 ' этой группы на этот день\n'
                 'Успехов)'
     )
+    start_mes = "Данные по функционалу отправлены"
+    return start_mes
 
 
-def testweather(count_pages):
+def testweather(count_pages: int, t_weather: list, t_speed: list, t_wind: list, event: str, vk: str, vk_session: str):
     """
         Позволяет показать текущую погоду сейчас, либо погоду на ближайшие 5 дней при выборе соответствующего варианта.
-        :param dice - счётчик страниц для формирования погоды на несколько дней
+        :param count_pages - счётчик страниц для формирования погоды на несколько дней
+        :param t_weather - словарь с вариантами погоды
+        :param t_speed - словарь с вариантами скорости ветра
+        :param t_wind - словарь с вариантами направления ветра
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :param vk_session - передача api от Вк непосредственно
+        :return: сообщение об успешном отправлении данных о погоде
     """
+    global time_right_now, info1
     if re.match("^СЕЙЧАС", event.text, re.IGNORECASE):
         path_val = requests.get('http://api.openweathermap.org/data/2.5/weather?q=moscow&appid'
                                 '=8ffb0255da9e43f05a700252453058bf&units=metric')
@@ -336,7 +352,6 @@ def testweather(count_pages):
                     ', силой: ' + str(
                 info["wind"]["speed"]) + ', то есть ' + wind_speed + '\n'
         )
-        weather_access = 0
     else:
         message_wind = ''
         for i in range(39):
@@ -375,7 +390,7 @@ def testweather(count_pages):
                 Данный адрес предоставлен как пример для его указания.
                 Выпилить в случае несовместимости с жизнью.
                 """
-                url1.append('C:/Users/leone/PycharmProjects/testproject1/weather/icons/' + '{}.png'.format(str(
+                url1.append('weather/icons/' + '{}.png'.format(str(
                     info1['list'][i]["weather"][0]["icon"])))
                 count_pages += 1
                 message_wind += str(count_pages) + ') Погода на ' + str(
@@ -389,7 +404,6 @@ def testweather(count_pages):
                                 str(t_wind[
                                         round(float(info1['list'][i]["wind"]["deg"]) / 45) % 8]) + ', силой: ' + \
                                 str(info1['list'][i]["wind"]["speed"]) + ', то есть ' + wind_speed + '\n'
-        weather_access = 0
         new_image = Image.new("RGBA", (count_pages * 50, 50))
         c = 0
         for i in url1:
@@ -397,7 +411,7 @@ def testweather(count_pages):
             new_image.paste(img2, (c, 0))
             c += 50
         image_name = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-        path_image = "C:/Users/leone/PycharmProjects/testproject1/weather/brush/{}.png".format(image_name)
+        path_image = "weather/brush/{}.png".format(image_name)
         new_image.save(path_image)
         photo = upload.photo_messages(photos=path_image)[0]
         attachments.append('photo{}_{}'.format(photo['owner_id'], photo['id']))
@@ -407,13 +421,17 @@ def testweather(count_pages):
             random_id=get_random_id(),
             message=message_wind
         )
-        count_pages = 0
         url1.clear()
+    weather_mes = "Данные по погодным условиям отправлены"
+    return weather_mes
 
 
-def week():
+def week(event: str, vk: str):
     """
         Показать текущую неделю и определить её чётность.
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешном отправлении данных о текущей неделе
     """
     if datetime.datetime.now().isocalendar()[1] % 2 == 0:
         chet = "чётная"
@@ -424,18 +442,22 @@ def week():
         random_id=get_random_id(),
         message="Cейчас идёт " + str(datetime.datetime.now().isocalendar()[1] - 6) + " неделя\n" + "Она " + chet
     )
+    week_mes = "Данные по дню недели отправлены"
+    return week_mes
 
 
-def weather():
+def weather(event: str, vk: str):
     """
         Определить желаемый пользователем тип погоды, а также ввести основные варианты понятий и обозначений для более наглядного
         описания погодных условий.
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешном отправлении данных о вариантах погоды
     """
     keyboard = VkKeyboard(one_time=True)
     keyboard.add_button('сейчас', color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     keyboard.add_button('на 5 дней', color=VkKeyboardColor.POSITIVE)
-    weather_access = 1
     t_weather = {'1': "Гроза", '2': "Изморось", '3': "Дождь", '4': "Снег", '5': "Туман", '6': "Чистое небо",
                  '7': "Облачно", }
     t_wind = ['северный', 'северо-восточный', 'восточный', 'юго-восточный', 'южный', 'юго-западный', 'западный',
@@ -452,9 +474,12 @@ def weather():
     return t_weather, t_wind, t_speed
 
 
-def found_prof():
+def found_prof(event: str, vk: str):
     """
         Показать меню для выбора желатемого формата расписания преподавателя.
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешной передаче данных и отображения сообщения
     """
     professor = str(event.text)
     keyboard = VkKeyboard(one_time=True)
@@ -472,10 +497,14 @@ def found_prof():
     return professor
 
 
-def schtudile(accept):
+def schtudile(accept: int, event: str, vk: str):
     """
-        Показать расписание группы при условии наличия заданной группы. Показать меню функций для выбора формата расписания занятий
+        Показать расписание группы при условии наличия заданной группы. Показать меню функций для выбора формата
+        расписания занятий
         :param accept - проверка на наличие ранее заданной группы
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешной передаче данных о расписании
     """
     if accept == 0:
         vk.messages.send(
@@ -524,13 +553,21 @@ def schtudile(accept):
                 random_id=get_random_id(),
                 message=outer
             )
+    stud_mes = "Данные по расписанию отправлены"
+    return stud_mes
 
 
-def schtudile_now(accept, prof_access):
+def schtudile_now(accept: int, prof_access: int, gr: str, gr1: str, professor: str, event: str, vk: str):
     """
         Показать текущее расписание группы (на сегодня или завтра) при условии наличия заданной группы.
         :param accept - проверка на наличие ранее заданной группы
         :param prof_access - проверка на отсутствие поиска преподавателя
+        :param gr - название текущей группы
+        :param gr1 - название заданной группы
+        :param professor - имя конкретного преподавателя
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: сообщение об успешной передаче данных о текущем расписании
     """
     global ogr
     if accept == 0:
@@ -576,15 +613,18 @@ def schtudile_now(accept, prof_access):
                 random_id=get_random_id(),
                 message=outer
             )
-            prof_access = 0
             accept -= 1
+    studn_mes = "Данные по расписанию отправлены"
+    return studn_mes
 
 
-def my_group(accept):
+def my_group(accept: int, event: str, vk: str):
     """
         Определение текущей группы учащегося
         :param accept - проверка на наличие ранее заданной группы
-
+        :param event - событие, передаваемое в функцию
+        :param vk - api для работы с Вк
+        :return: передача данных о текущей группе, а также данных о счётчике доступа к функционалу заданной группы
     """
     if accept != 0:
         your_gr = []
@@ -600,10 +640,14 @@ def my_group(accept):
     return gr, accept
 
 
-def name_group(accept):
+def name_group(accept: int, event: str, keyboard: str, vk: str):
     """
         Определение конкретной группы для разового поиска её расписания
         :param accept - проверка на наличие ранее заданной группы
+        :param event - событие, передаваемое в функцию
+        :param keyboard - вызов функции клавиатуры для корректной работы
+        :param vk - api для работы с Вк
+        :return: передача данных об имени конкретной группы
 
     """
     global ogr
@@ -623,10 +667,13 @@ def name_group(accept):
     return gr1
 
 
-def stud_mes():
+def stud_mes(event: str, keyboard: str, vk: str):
     """
         Отображение сообщения расписания конкретной группы
-
+        :param event - событие, передаваемое в функцию
+        :param keyboard - вызов функции клавиатуры для корректной работы
+        :param vk - api для работы с Вк
+        :return: сообщение о передаче данных об успешном отображении сообщения
     """
     vk.messages.send(
         keyboard=keyboard.get_keyboard(),
@@ -634,13 +681,19 @@ def stud_mes():
         random_id=get_random_id(),
         message='Вы хотите узнать расписание …'
     )
+    student_mes = "Сообщение по группе отправлено"
+    return student_mes
 
 
-def bot_func():
+def bot_func(event: str, keyboard: str, vk: str):
     """
         Выполнение технических функций бота
-
+        :param event - событие, передаваемое в функцию
+        :param keyboard - вызов функции клавиатуры для корректной работы
+        :param vk - api для работы с Вк
+        :return: сообщение об успешной передаче данных
     """
+    global u_gr
     if accept == 1:
         u_gr = pickle.loads(gr)[0].upper()
     if re.search("[А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
@@ -672,54 +725,77 @@ def bot_func():
                 )
                 mas = 0
                 break
+    tech_mes = "Данные отправлены"
+    return tech_mes
 
-for event in longpoll.listen():  # команды
-    """
-        Циклический слушатель команд для корректной работы бота
-    """
-    if event.type == VkEventType.MESSAGE_NEW and event.text and event.to_me:
-        if re.match("НАЧАТЬ", event.text, re.IGNORECASE):
-            start()
-        elif re.match("^БОТ$|^БОТ [А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
-            keyboard = VkKeyboard(one_time=True)
-            keyboard.add_button('на сегодня', color=VkKeyboardColor.POSITIVE)
-            keyboard.add_button('на завтра', color=VkKeyboardColor.NEGATIVE)
-            keyboard.add_line()
-            keyboard.add_button('на эту неделю', color=VkKeyboardColor.PRIMARY)
-            keyboard.add_button('на следующую неделю', color=VkKeyboardColor.PRIMARY)
-            keyboard.add_line()
-            keyboard.add_button('какая неделя?', color=VkKeyboardColor.DEFAULT)
-            keyboard.add_button('какая группа?', color=VkKeyboardColor.DEFAULT)
 
-            if re.search("[А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
-                gr1 = name_group(accept)
-            else:
-                stud_mes()
-        elif re.match("^БОТ \w+$|^БОТ \w+ [А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
-            bot_func()
-        elif re.match("[А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
-            gr, accept = my_group(accept)
-        elif re.match("^НА СЕГОДНЯ|^НА ЗАВТРА", event.text, re.IGNORECASE):
-                schtudile_now(accept, prof_access)
-        elif re.match("^НА ЭТУ НЕДЕЛЮ|^НА СЛЕДУЮЩУЮ НЕДЕЛЮ|^КАКАЯ ГРУППА?", event.text, re.IGNORECASE):
-                schtudile(accept)
+def init(token1: str):
+    """
+        Запуcтить сессию, передать токен сессии, запустить циклический "слушатель" команд.
+        :param token1 - токен, передаваемый в функцию
+    """
+    print('ready')
+    update_rasp()
+    replace_none(professors)
+    global t_wind, t_speed, t_weather, weather_access, prof_access, accept, gr, gr1, professor, keyboard
+    vk_session = vk_api.VkApi(token=token1)
+    vk = vk_session.get_api()
+    longpoll = VkLongPoll(vk_session)
+    for event in longpoll.listen():  #  Циклический слушатель команд для корректной работы бота
+        if event.type == VkEventType.MESSAGE_NEW and event.text and event.to_me:
+            if re.match("НАЧАТЬ", event.text, re.IGNORECASE):
+                print(start(event, vk))
+            elif re.match("^БОТ$|^БОТ [А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
+                keyboard = VkKeyboard(one_time=True)
+                keyboard.add_button('на сегодня', color=VkKeyboardColor.POSITIVE)
+                keyboard.add_button('на завтра', color=VkKeyboardColor.NEGATIVE)
+                keyboard.add_line()
+                keyboard.add_button('на эту неделю', color=VkKeyboardColor.PRIMARY)
+                keyboard.add_button('на следующую неделю', color=VkKeyboardColor.PRIMARY)
+                keyboard.add_line()
+                keyboard.add_button('какая неделя?', color=VkKeyboardColor.DEFAULT)
+                keyboard.add_button('какая группа?', color=VkKeyboardColor.DEFAULT)
+
+                if re.search("[А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
+                    gr1 = name_group(accept, event, keyboard, vk)
+                else:
+                    print(stud_mes(event, keyboard, vk))
+            elif re.match("^БОТ \w+$|^БОТ \w+ [А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
+                print(bot_func(event, keyboard, vk))
+            elif re.match("[А-Я]{2}БО-[0-9]{2}-[0-9]{2}", event.text, re.IGNORECASE):
+                gr, accept = my_group(accept, event, vk)
+            elif re.match("^НА СЕГОДНЯ|^НА ЗАВТРА", event.text, re.IGNORECASE):
+                print(schtudile_now(accept, prof_access, gr, gr1, professor, event, vk))
+            elif re.match("^НА ЭТУ НЕДЕЛЮ|^НА СЛЕДУЮЩУЮ НЕДЕЛЮ|^КАКАЯ ГРУППА?", event.text, re.IGNORECASE):
+                print(schtudile(accept, event, vk))
                 prof_access = 0
                 accept -= 1
-        elif re.match("^КАКАЯ НЕДЕЛЯ?", event.text, re.IGNORECASE):
-            week()
-        elif re.match("^НАЙТИ \w+$", event.text, re.IGNORECASE):
-            found()
-        elif re.match("^\w+ \w.\w.", event.text, re.IGNORECASE) and prof_access == 1:
-            professor = found_prof()
-            prof_access = 1
-            accept += 1
-        elif re.match("^ПОГОДА", event.text, re.IGNORECASE):
-            t_weather, t_wind, t_speed = weather()
-            weather_access = 1
-        elif re.match("^СЕЙЧАС|^СЕГОДНЯ|^ЗАВТРА|^НА 5 ДНЕЙ", event.text, re.IGNORECASE) and weather_access == 1:
-            testweather(count_pages)
-            weather_access = 0
-        elif re.match("^КОРОНАВИРУС", event.text, re.IGNORECASE):
-            coronavirus()
-        else:
-            error()
+            elif re.match("^КАКАЯ НЕДЕЛЯ?", event.text, re.IGNORECASE):
+                print(week(event, vk))
+            elif re.match("^НАЙТИ \w+$", event.text, re.IGNORECASE):
+                print(found(event, vk))
+            elif re.match("^\w+ \w.\w.", event.text, re.IGNORECASE) and prof_access == 1:
+                professor = found_prof(event, vk)
+                prof_access = 1
+                accept += 1
+            elif re.match("^ПОГОДА", event.text, re.IGNORECASE):
+                t_weather, t_wind, t_speed = weather(event, vk)
+                weather_access = 1
+            elif re.match("^СЕЙЧАС|^СЕГОДНЯ|^ЗАВТРА|^НА 5 ДНЕЙ", event.text, re.IGNORECASE) and weather_access == 1:
+                print(testweather(count_pages, t_weather, t_speed, t_wind, event, vk, vk_session))
+                weather_access = 0
+            elif re.match("^КОРОНАВИРУС", event.text, re.IGNORECASE):
+                print(coronavirus(event, vk, vk_session))
+            else:
+                print(error(event, vk))
+
+
+"""
+    ВАЖНО!
+    Запуск сессии, передача токена. Для работоспособности бота необходимо вписать токен в поле снизу. Получить токен можно, \
+    сгенерировав его в сообществе Вконтакте и вписав в поле ниже.
+    Подробнее по ссылке:
+    https://vk.com/dev/bots_docs
+"""
+
+init('')  # токен сюда

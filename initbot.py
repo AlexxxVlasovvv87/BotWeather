@@ -1,5 +1,5 @@
-"""from MOd6bot import init
+"""import Modbot
 
 # запуск бота
 if __name__ == '__main__':
-    init('') """
+    Modbot.__init__('') # токен сюда"""
